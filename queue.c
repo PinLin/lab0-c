@@ -105,7 +105,7 @@ bool q_insert_tail(struct list_head *head, char *s)
  */
 element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
 {
-    if (!head || q_size(head) == 0)
+    if (!head || list_empty(head))
         return NULL;
 
     element_t *e = list_entry(head->next, element_t, list);
@@ -124,7 +124,7 @@ element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
  */
 element_t *q_remove_tail(struct list_head *head, char *sp, size_t bufsize)
 {
-    if (!head || q_size(head) == 0)
+    if (!head || list_empty(head))
         return NULL;
 
     element_t *e = list_entry(head->prev, element_t, list);
@@ -174,7 +174,7 @@ int q_size(struct list_head *head)
  */
 bool q_delete_mid(struct list_head *head)
 {
-    if (!head || q_size(head) == 0)
+    if (!head || list_empty(head))
         return false;
 
     struct list_head *fast = head->next, *slow = head->next;
