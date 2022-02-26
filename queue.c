@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -258,9 +259,62 @@ void q_reverse(struct list_head *head)
     }
 }
 
+struct list_head *q_merge_sort(struct list_head *head);
+
 /*
  * Sort elements of queue in ascending order
  * No effect if q is NULL or empty. In addition, if q has only one
  * element, do nothing.
  */
-void q_sort(struct list_head *head) {}
+void q_sort(struct list_head *head)
+{
+    if (!head || list_empty(head))
+        return;
+
+    // Unlink list head and list tail
+    head->prev->next = NULL;
+    head->next = q_merge_sort(head->next);
+    struct list_head *curr = head;
+
+    // Recover circular doubly linked list
+    while (curr->next) {
+        curr->next->prev = curr;
+        curr = curr->next;
+    }
+    head->prev = curr;
+    curr->next = head;
+}
+
+struct list_head *q_merge_sort(struct list_head *head)
+{
+    if (!head || !head->next)
+        return head;
+
+    // Divide
+    struct list_head *fast = head, *slow = head;
+    while (fast && fast->next) {
+        fast = fast->next->next;
+        slow = slow->next;
+    }
+    slow->prev->next = NULL;
+
+    struct list_head *left = q_merge_sort(head);
+    struct list_head *right = q_merge_sort(slow);
+
+    // Conquer
+    struct list_head *merged = NULL, **next_ptr = &merged;
+    while (left && right) {
+        if (strcmp(list_entry(left, element_t, list)->value,
+                   list_entry(right, element_t, list)->value) < 0) {
+            *next_ptr = left;
+            left = left->next;
+            next_ptr = &(*next_ptr)->next;
+        } else {
+            *next_ptr = right;
+            right = right->next;
+            next_ptr = &(*next_ptr)->next;
+        }
+    }
+    *next_ptr = (struct list_head *) ((uintptr_t) left | (uintptr_t) right);
+    return merged;
+}
