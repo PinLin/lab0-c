@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,11 +18,25 @@
  */
 struct list_head *q_new()
 {
-    return NULL;
+    struct list_head *head = malloc(sizeof(struct list_head));
+    if (!head)
+        return NULL;
+
+    INIT_LIST_HEAD(head);
+    return head;
 }
 
 /* Free all storage used by queue */
-void q_free(struct list_head *l) {}
+void q_free(struct list_head *l)
+{
+    if (!l)
+        return;
+
+    element_t *curr, *next;
+    list_for_each_entry_safe (curr, next, l, list)
+        q_release_element(curr);
+    free(l);
+}
 
 /*
  * Attempt to insert element at head of queue.
@@ -32,6 +47,20 @@ void q_free(struct list_head *l) {}
  */
 bool q_insert_head(struct list_head *head, char *s)
 {
+    if (!head)
+        return false;
+
+    element_t *node = malloc(sizeof(element_t));
+    if (!node)
+        return false;
+
+    node->value = strdup(s);
+    if (!node->value) {
+        free(node);
+        return false;
+    }
+
+    list_add(&node->list, head);
     return true;
 }
 
@@ -44,6 +73,20 @@ bool q_insert_head(struct list_head *head, char *s)
  */
 bool q_insert_tail(struct list_head *head, char *s)
 {
+    if (!head)
+        return false;
+
+    element_t *node = malloc(sizeof(element_t));
+    if (!node)
+        return false;
+
+    node->value = strdup(s);
+    if (!node->value) {
+        free(node);
+        return false;
+    }
+
+    list_add_tail(&node->list, head);
     return true;
 }
 
@@ -63,7 +106,17 @@ bool q_insert_tail(struct list_head *head, char *s)
  */
 element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
 {
-    return NULL;
+    if (!head || list_empty(head))
+        return NULL;
+
+    element_t *e = list_entry(head->next, element_t, list);
+    list_del(head->next);
+    if (sp) {
+        // If sp is non-NULL, copy the value of removed element to *sp.
+        strncpy(sp, e->value, bufsize);
+        sp[bufsize - 1] = '\0';
+    }
+    return e;
 }
 
 /*
@@ -72,7 +125,17 @@ element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
  */
 element_t *q_remove_tail(struct list_head *head, char *sp, size_t bufsize)
 {
-    return NULL;
+    if (!head || list_empty(head))
+        return NULL;
+
+    element_t *e = list_entry(head->prev, element_t, list);
+    list_del(head->prev);
+    if (sp) {
+        // If sp is non-NULL, copy the value of removed element to *sp.
+        strncpy(sp, e->value, bufsize);
+        sp[bufsize - 1] = '\0';
+    }
+    return e;
 }
 
 /*
@@ -112,7 +175,17 @@ int q_size(struct list_head *head)
  */
 bool q_delete_mid(struct list_head *head)
 {
-    // https://leetcode.com/problems/delete-the-middle-node-of-a-linked-list/
+    if (!head || list_empty(head))
+        return false;
+
+    struct list_head *fast = head->next, *slow = head->next;
+    while (fast != head && fast->next != head) {
+        fast = fast->next->next;
+        slow = slow->next;
+    }
+
+    list_del(slow);
+    q_release_element(list_entry(slow, element_t, list));
     return true;
 }
 
@@ -127,7 +200,22 @@ bool q_delete_mid(struct list_head *head)
  */
 bool q_delete_dup(struct list_head *head)
 {
-    // https://leetcode.com/problems/remove-duplicates-from-sorted-list-ii/
+    if (!head)
+        return false;
+
+    bool is_dup = false;
+    element_t *curr, *next;
+    list_for_each_entry_safe (curr, next, head, list) {
+        if (curr->list.next != head && strcmp(curr->value, next->value) == 0) {
+            list_del(&curr->list);
+            q_release_element(curr);
+            is_dup = true;
+        } else if (is_dup) {
+            list_del(&curr->list);
+            q_release_element(curr);
+            is_dup = false;
+        }
+    }
     return true;
 }
 
@@ -136,7 +224,21 @@ bool q_delete_dup(struct list_head *head)
  */
 void q_swap(struct list_head *head)
 {
-    // https://leetcode.com/problems/swap-nodes-in-pairs/
+    if (!head)
+        return;
+
+    struct list_head *curr, *next, *temp = NULL;
+    list_for_each_safe (curr, next, head) {
+        if (!temp) {
+            list_del(curr);
+            temp = curr;
+        } else {
+            list_add(temp, curr);
+            temp = NULL;
+        }
+    }
+    if (temp)
+        list_add_tail(temp, head);
 }
 
 /*
@@ -146,11 +248,73 @@ void q_swap(struct list_head *head)
  * (e.g., by calling q_insert_head, q_insert_tail, or q_remove_head).
  * It should rearrange the existing ones.
  */
-void q_reverse(struct list_head *head) {}
+void q_reverse(struct list_head *head)
+{
+    if (!head)
+        return;
+
+    struct list_head *curr, *next;
+    list_for_each_safe (curr, next, head) {
+        list_move(curr, head);
+    }
+}
+
+struct list_head *q_merge_sort(struct list_head *head);
 
 /*
  * Sort elements of queue in ascending order
  * No effect if q is NULL or empty. In addition, if q has only one
  * element, do nothing.
  */
-void q_sort(struct list_head *head) {}
+void q_sort(struct list_head *head)
+{
+    if (!head || list_empty(head))
+        return;
+
+    // Unlink list head and list tail
+    head->prev->next = NULL;
+    head->next = q_merge_sort(head->next);
+    struct list_head *curr = head;
+
+    // Recover circular doubly linked list
+    while (curr->next) {
+        curr->next->prev = curr;
+        curr = curr->next;
+    }
+    head->prev = curr;
+    curr->next = head;
+}
+
+struct list_head *q_merge_sort(struct list_head *head)
+{
+    if (!head || !head->next)
+        return head;
+
+    // Divide
+    struct list_head *fast = head, *slow = head;
+    while (fast && fast->next) {
+        fast = fast->next->next;
+        slow = slow->next;
+    }
+    slow->prev->next = NULL;
+
+    struct list_head *left = q_merge_sort(head);
+    struct list_head *right = q_merge_sort(slow);
+
+    // Conquer
+    struct list_head *merged = NULL, **next_ptr = &merged;
+    while (left && right) {
+        if (strcmp(list_entry(left, element_t, list)->value,
+                   list_entry(right, element_t, list)->value) < 0) {
+            *next_ptr = left;
+            left = left->next;
+            next_ptr = &(*next_ptr)->next;
+        } else {
+            *next_ptr = right;
+            right = right->next;
+            next_ptr = &(*next_ptr)->next;
+        }
+    }
+    *next_ptr = (struct list_head *) ((uintptr_t) left | (uintptr_t) right);
+    return merged;
+}
