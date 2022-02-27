@@ -260,7 +260,8 @@ void q_reverse(struct list_head *head)
     }
 }
 
-struct list_head *q_merge_sort(struct list_head *head);
+void merge_sort(struct list_head *head);
+struct list_head *divide_and_conquer(struct list_head *head);
 
 /*
  * Sort elements of queue in ascending order
@@ -272,12 +273,18 @@ void q_sort(struct list_head *head)
     if (!head || list_empty(head))
         return;
 
+    merge_sort(head);
+}
+
+void merge_sort(struct list_head *head)
+{
     // Unlink list head and list tail
     head->prev->next = NULL;
-    head->next = q_merge_sort(head->next);
-    struct list_head *curr = head;
+
+    head->next = divide_and_conquer(head->next);
 
     // Recover circular doubly linked list
+    struct list_head *curr = head;
     while (curr->next) {
         curr->next->prev = curr;
         curr = curr->next;
@@ -286,7 +293,7 @@ void q_sort(struct list_head *head)
     curr->next = head;
 }
 
-struct list_head *q_merge_sort(struct list_head *head)
+struct list_head *divide_and_conquer(struct list_head *head)
 {
     if (!head || !head->next)
         return head;
@@ -299,8 +306,8 @@ struct list_head *q_merge_sort(struct list_head *head)
     }
     slow->prev->next = NULL;
 
-    struct list_head *left = q_merge_sort(head);
-    struct list_head *right = q_merge_sort(slow);
+    struct list_head *left = divide_and_conquer(head);
+    struct list_head *right = divide_and_conquer(slow);
 
     // Conquer
     struct list_head *merged = NULL, **next_ptr = &merged;
@@ -309,12 +316,11 @@ struct list_head *q_merge_sort(struct list_head *head)
                    list_entry(right, element_t, list)->value) < 0) {
             *next_ptr = left;
             left = left->next;
-            next_ptr = &(*next_ptr)->next;
         } else {
             *next_ptr = right;
             right = right->next;
-            next_ptr = &(*next_ptr)->next;
         }
+        next_ptr = &(*next_ptr)->next;
     }
     *next_ptr = (struct list_head *) ((uintptr_t) left | (uintptr_t) right);
     return merged;
