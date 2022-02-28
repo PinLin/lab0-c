@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "report.h"
+#include "tinyweb.h"
 
 /* Some global values */
 int simulation = 0;
@@ -397,6 +398,35 @@ static bool do_time(int argc, char *argv[])
     return ok;
 }
 
+static bool do_web(int argc, char *argv[])
+{
+    if (argc != 1 && argc != 2) {
+        report(1, "%s takes 0-1 arguments", argv[0]);
+        return false;
+    }
+
+    if (webfd > 0) {
+        report(1, "Already launch a tiny-web-server");
+        return false;
+    }
+
+    int port = 9999;
+    if (argc == 2) {
+        if (!get_int(argv[1], &port) || port < 0 || port > 65535) {
+            report(1, "Invalid port number '%s'", argv[2]);
+        }
+    }
+    webfd = open_listenfd(port);
+    if (webfd > 0) {
+        report(3, "Listen on port %d, fd is %d", port, webfd);
+        noise = false;
+        return true;
+    }
+
+    report(1, "Could not launch the tiny-web-server");
+    return false;
+}
+
 /* Initialize interpreter */
 void init_cmd()
 {
@@ -411,6 +441,9 @@ void init_cmd()
     ADD_COMMAND(source, " file           | Read commands from source file");
     ADD_COMMAND(log, " file           | Copy output to file");
     ADD_COMMAND(time, " cmd arg ...    | Time command execution");
+    ADD_COMMAND(web,
+                " [port]         | Read commands from a tiny-web-server. "
+                "(default: port == 9999)");
     add_cmd("#", do_comment_cmd, " ...            | Display comment");
     add_param("simulation", &simulation, "Start/Stop simulation mode", NULL);
     add_param("verbose", &verblevel, "Verbosity level", NULL);
@@ -554,7 +587,13 @@ int cmd_select(int nfds,
 
         /* Add input fd to readset for select */
         infd = buf_stack->fd;
+        FD_ZERO(readfds);
         FD_SET(infd, readfds);
+
+        /* If web not ready listen */
+        if (webfd != -1)
+            FD_SET(webfd, readfds);
+
         if (infd == STDIN_FILENO && prompt_flag) {
             printf("%s", prompt);
             fflush(stdout);
@@ -563,6 +602,8 @@ int cmd_select(int nfds,
 
         if (infd >= nfds)
             nfds = infd + 1;
+        if (webfd >= nfds)
+            nfds = webfd + 1;
     }
     if (nfds == 0)
         return 0;
@@ -576,12 +617,23 @@ int cmd_select(int nfds,
         /* Commandline input available */
         FD_CLR(infd, readfds);
         result--;
-        if (has_infile) {
-            char *cmdline;
-            cmdline = readline();
-            if (cmdline)
-                interpret_cmd(cmdline);
-        }
+        char *cmdline;
+        cmdline = readline();
+        if (cmdline)
+            interpret_cmd(cmdline);
+    } else if (readfds && FD_ISSET(webfd, readfds)) {
+        FD_CLR(webfd, readfds);
+        result--;
+        int connfd;
+        struct sockaddr_in clientaddr;
+        socklen_t clientlen = sizeof(clientaddr);
+        connfd = accept(webfd, (SA *) &clientaddr, &clientlen);
+
+        char *p = process(connfd, &clientaddr);
+        if (p)
+            interpret_cmd(p);
+        free(p);
+        close(connfd);
     }
     return result;
 }
@@ -645,7 +697,7 @@ bool run_console(char *infile_name)
 
     if (!has_infile) {
         char *cmdline;
-        while ((cmdline = linenoise(prompt)) != NULL) {
+        while (noise && (cmdline = linenoise(prompt)) != NULL) {
             interpret_cmd(cmdline);
             linenoiseHistoryAdd(cmdline);       /* Add to the history. */
             linenoiseHistorySave(HISTORY_FILE); /* Save the history on disk. */
@@ -654,9 +706,15 @@ bool run_console(char *infile_name)
                 cmd_select(0, NULL, NULL, NULL, NULL);
             has_infile = false;
         }
+        if (!noise) {
+            while (!cmd_done()) {
+                cmd_select(0, NULL, NULL, NULL, NULL);
+            }
+        }
     } else {
-        while (!cmd_done())
+        while (!cmd_done()) {
             cmd_select(0, NULL, NULL, NULL, NULL);
+        }
     }
 
     return err_cnt == 0;
