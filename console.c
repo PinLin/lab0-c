@@ -405,6 +405,11 @@ static bool do_web(int argc, char *argv[])
         return false;
     }
 
+    if (webfd > 0) {
+        report(1, "Already launch a tiny-web-server");
+        return false;
+    }
+
     int port = 9999;
     if (argc == 2) {
         if (!get_int(argv[1], &port) || port < 0 || port > 65535) {
@@ -412,14 +417,14 @@ static bool do_web(int argc, char *argv[])
         }
     }
     webfd = open_listenfd(port);
-    if (webfd <= 0) {
-        report(1, "Could not launch the tiny-web-server");
-        return false;
+    if (webfd > 0) {
+        report(3, "Listen on port %d, fd is %d", port, webfd);
+        noise = false;
+        return true;
     }
-    report(3, "listen on port %d, fd is %d", port, webfd);
-    noise = false;
 
-    return true;
+    report(1, "Could not launch the tiny-web-server");
+    return false;
 }
 
 /* Initialize interpreter */
