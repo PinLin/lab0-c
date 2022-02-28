@@ -21,6 +21,10 @@
 #define MAXLINE 1024 /* max length of a line */
 #define RIO_BUFSIZE 1024
 
+#ifndef DEFAULT_PORT
+#define DEFAULT_PORT 9999 /* use this port if none given as arg to main() */
+#endif
+
 #ifndef FORK_COUNT
 #define FORK_COUNT 4
 #endif

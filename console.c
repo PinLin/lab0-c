@@ -400,7 +400,17 @@ static bool do_time(int argc, char *argv[])
 
 static bool do_web(int argc, char *argv[])
 {
-    int port = DEFAULT_PORT;
+    if (argc != 1 && argc != 2) {
+        report(1, "%s takes 0-1 arguments", argv[0]);
+        return false;
+    }
+
+    int port = 9999;
+    if (argc == 2) {
+        if (!get_int(argv[1], &port) || port < 0 || port > 65535) {
+            report(1, "Invalid port number '%s'", argv[2]);
+        }
+    }
     webfd = open_listenfd(port);
     if (webfd <= 0) {
         report(1, "Could not launch the tiny-web-server");
@@ -426,7 +436,9 @@ void init_cmd()
     ADD_COMMAND(source, " file           | Read commands from source file");
     ADD_COMMAND(log, " file           | Copy output to file");
     ADD_COMMAND(time, " cmd arg ...    | Time command execution");
-    ADD_COMMAND(web, "                | Read commands from a tiny-web-server");
+    ADD_COMMAND(web,
+                " [port]         | Read commands from a tiny-web-server. "
+                "(default: port == 9999)");
     add_cmd("#", do_comment_cmd, " ...            | Display comment");
     add_param("simulation", &simulation, "Start/Stop simulation mode", NULL);
     add_param("verbose", &verblevel, "Verbosity level", NULL);

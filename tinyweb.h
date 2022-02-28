@@ -4,10 +4,6 @@
 #include <netinet/in.h>
 #include <stdbool.h>
 
-#ifndef DEFAULT_PORT
-#define DEFAULT_PORT 9999
-#endif
-
 extern int webfd;
 extern bool noise;
 
